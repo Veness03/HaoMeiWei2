@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { LanguageProvider, useLanguage } from '@/src/contexts/LanguageContext';
 import Layout from '@/src/components/Layout';
@@ -64,6 +64,24 @@ const TitleUpdater = () => {
   return null;
 };
 
+const RootRoute = () => {
+  const { session, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
+        <div className="w-8 h-8 border-4 border-amber-600/30 border-t-amber-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+  
+  if (session) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <Navigate to="/login" replace />;
+};
+
 export default function App() {
   return (
     <LanguageProvider>
@@ -83,12 +101,13 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           
+          <Route path="/" element={<RootRoute />} />
+          
           <Route path="/" element={
             <ProtectedRoute>
               <Layout />
             </ProtectedRoute>
           }>
-            <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             
             <Route 
