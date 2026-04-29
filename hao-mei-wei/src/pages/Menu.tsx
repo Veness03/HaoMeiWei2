@@ -19,6 +19,7 @@ export default function Menu() {
   const [loading, setLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -50,9 +51,56 @@ export default function Menu() {
     }
   }
 
+  const handleEditClick = (item: MenuItem) => {
+    console.log('Edit clicked for item:', item.id);
+    setFormData({
+      name: item.name,
+      chinese_name: item.chinese_name || '',
+      category: item.category,
+      price: item.price.toString(),
+      is_active: item.is_active
+    });
+    setEditingId(item.id);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = async (id: string, name: string) => {
+    console.log('Delete clicked for item:', id);
+    if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
+    
+    try {
+      setLoading(true);
+      const { error } = await supabase.from('menu_items').delete().eq('id', id);
+      if (error) throw error;
+      toast.success(t('menu.successDelete') || 'Menu item deleted successfully');
+      fetchMenu();
+    } catch (error: any) {
+      console.error('Error deleting menu item:', error);
+      toast.error(error.message || 'Failed to delete menu item');
+      setLoading(false);
+    }
+  };
+
+  const handleToggleActiveClick = async (item: MenuItem) => {
+    console.log('Toggle active clicked for item:', item.id);
+    try {
+      setLoading(true);
+      const { error } = await supabase.from('menu_items')
+        .update({ is_active: !item.is_active })
+        .eq('id', item.id);
+      if (error) throw error;
+      toast.success(`Menu item is now ${!item.is_active ? 'active' : 'inactive'}`);
+      fetchMenu();
+    } catch (error: any) {
+      console.error('Error toggling menu item status:', error);
+      toast.error(error.message || 'Failed to toggle status');
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Menu Add form submitted', formData);
+    console.log('Menu Add/Edit form submitted', formData, 'editingId:', editingId);
     try {
       setSaving(true);
       const { data: userData } = await supabase.auth.getUser();
@@ -61,18 +109,34 @@ export default function Menu() {
         return;
       }
 
-      const { error } = await supabase.from('menu_items').insert([{
-        name: formData.name,
-        chinese_name: formData.chinese_name,
-        category: formData.category,
-        price: parseFloat(formData.price),
-        is_active: formData.is_active
-      }]);
+      if (editingId) {
+        const { error } = await supabase.from('menu_items')
+          .update({
+            name: formData.name,
+            chinese_name: formData.chinese_name,
+            category: formData.category,
+            price: parseFloat(formData.price),
+            is_active: formData.is_active
+          })
+          .eq('id', editingId);
 
-      if (error) throw error;
+        if (error) throw error;
+        toast.success(t('menu.successEdit') || 'Menu item updated successfully');
+      } else {
+        const { error } = await supabase.from('menu_items').insert([{
+          name: formData.name,
+          chinese_name: formData.chinese_name,
+          category: formData.category,
+          price: parseFloat(formData.price),
+          is_active: formData.is_active
+        }]);
+
+        if (error) throw error;
+        toast.success(t('menu.successAdd'));
+      }
       
-      toast.success(t('menu.successAdd'));
       setFormData({ name: '', chinese_name: '', category: 'Rice', price: '', is_active: true });
+      setEditingId(null);
       setIsModalOpen(false);
       fetchMenu();
     } catch (error: any) {
@@ -91,7 +155,12 @@ export default function Menu() {
           <p className="text-xs font-medium uppercase tracking-widest text-stone-500">{t('menu.subtitle')}</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            console.log('Add Menu Item clicked');
+            setEditingId(null);
+            setFormData({ name: '', chinese_name: '', category: 'Rice', price: '', is_active: true });
+            setIsModalOpen(true);
+          }}
           className="bg-amber-600 text-stone-950 font-bold px-4 py-2 rounded-xl hover:bg-amber-500 transition-colors flex items-center gap-2"
         >
           <Plus size={20} />
@@ -129,18 +198,27 @@ export default function Menu() {
                     </td>
                     <td className="p-4 text-right font-medium text-amber-500">{item.price.toFixed(2)}</td>
                     <td className="p-4 text-center">
-                      <span className={`px-2 py-1 rounded text-[10px] border tracking-widest uppercase font-bold ${
-                        item.is_active ? 'bg-emerald-950/40 text-emerald-500 border-emerald-900/50' : 'bg-rose-950/40 text-rose-500 border-rose-900/50'
-                      }`}>
+                      <button 
+                        onClick={() => handleToggleActiveClick(item)}
+                        className={`px-2 py-1 rounded text-[10px] border tracking-widest uppercase font-bold hover:brightness-110 transition-all ${
+                          item.is_active ? 'bg-emerald-950/40 text-emerald-500 border-emerald-900/50' : 'bg-rose-950/40 text-rose-500 border-rose-900/50'
+                        }`}
+                      >
                         {item.is_active ? t('menu.active') : t('menu.inactive')}
-                      </span>
+                      </button>
                     </td>
                     <td className="p-4">
                       <div className="flex items-center justify-end gap-2">
-                        <button className="p-1 text-stone-500 hover:text-amber-500 transition-colors">
+                        <button 
+                          onClick={() => handleEditClick(item)}
+                          className="p-1 text-stone-500 hover:text-amber-500 transition-colors"
+                        >
                           <Edit2 size={18} />
                         </button>
-                        <button className="p-1 text-stone-500 hover:text-rose-500 transition-colors">
+                        <button 
+                          onClick={() => handleDeleteClick(item.id, item.name)}
+                          className="p-1 text-stone-500 hover:text-rose-500 transition-colors"
+                        >
                           <Trash2 size={18} />
                         </button>
                       </div>
@@ -228,7 +306,10 @@ export default function Menu() {
               <div className="pt-4 flex gap-3">
                 <button 
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => {
+                    console.log('Cancel clicked');
+                    setIsModalOpen(false);
+                  }}
                   className="flex-1 px-4 py-2.5 border border-stone-700 text-stone-400 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-stone-800 transition-colors"
                 >
                   {t('common.cancel')}
