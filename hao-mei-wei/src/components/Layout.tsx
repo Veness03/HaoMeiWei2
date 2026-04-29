@@ -123,7 +123,7 @@ export default function Layout() {
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-10 bg-[#0A0A0A]/95 backdrop-blur-sm pt-16">
+        <div className="md:hidden fixed inset-0 z-10 bg-[#0A0A0A]/95 backdrop-blur-sm pt-16 pb-20">
           <NavContent />
         </div>
       )}
@@ -141,7 +141,7 @@ export default function Layout() {
       </div>
 
       {/* Mobile Bottom Navigation (Quick Actions) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0F0F0F] border-t border-stone-800 flex justify-around p-2 z-20 safe-area-bottom">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0F0F0F] border-t border-stone-800 flex justify-around p-2 z-30 safe-area-bottom">
         {filteredNav.slice(0, 4).map((item) => (
           <NavLink
             key={item.to}
@@ -156,6 +156,13 @@ export default function Layout() {
             <span className="text-[10px] mt-1 font-medium">{item.label}</span>
           </NavLink>
         ))}
+        <button 
+          onClick={handleSignOut}
+          className="flex flex-col items-center p-2 rounded-lg text-stone-500 hover:text-stone-300"
+        >
+          <LogOut size={20} />
+          <span className="text-[10px] mt-1 font-medium">{t('nav.signOut')}</span>
+        </button>
       </div>
     </div>
   );
