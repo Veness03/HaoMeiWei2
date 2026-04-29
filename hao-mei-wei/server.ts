@@ -65,7 +65,7 @@ async function startServer() {
   };
 
   // API Routes
-  app.post('/api/hr/users', verifyAdmin, async (req, res) => {
+  app.post('/api/create-user', verifyAdmin, async (req: express.Request, res: express.Response) => {
     try {
       const { email, password, full_name, role } = req.body;
       
@@ -100,10 +100,13 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/hr/users/:id', verifyAdmin, async (req, res) => {
+  app.patch('/api/update-user', verifyAdmin, async (req: express.Request, res: express.Response) => {
     try {
-      const { id } = req.params;
-      const { role, is_active } = req.body;
+      const { id, role, is_active } = req.body;
+      if (!id) {
+        res.status(400).json({ error: 'Missing user id' });
+        return;
+      }
 
       const updates: any = {};
       if (role !== undefined) updates.role = role;
