@@ -3,6 +3,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Users, Plus, X, ShieldAlert, Check, Ban } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/src/contexts/LanguageContext';
+import { formatDate } from '@/src/lib/dateUtils';
 
 interface Profile {
   id: string;
@@ -14,7 +15,7 @@ interface Profile {
 }
 
 export default function HRManagement() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,7 +61,7 @@ export default function HRManagement() {
       
       const { data: { session } } = await supabase.auth.getSession();
       
-      const res = await fetch('/api/hr/users', {
+      const res = await fetch('/api/create-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -68,6 +69,11 @@ export default function HRManagement() {
         },
         body: JSON.stringify(formData)
       });
+      
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server error: API returned non-JSON response');
+      }
       
       const result = await res.json();
       
@@ -91,15 +97,20 @@ export default function HRManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      const res = await fetch(`/api/hr/users/${id}`, {
+      const res = await fetch(`/api/update-user`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`
         },
-        body: JSON.stringify({ role: newRole })
+        body: JSON.stringify({ id, role: newRole })
       });
       
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server error: API returned non-JSON response');
+      }
+
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || t('hr.failUpdate'));
       
@@ -114,15 +125,20 @@ export default function HRManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      const res = await fetch(`/api/hr/users/${id}`, {
+      const res = await fetch(`/api/update-user`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`
         },
-        body: JSON.stringify({ is_active: !currentStatus })
+        body: JSON.stringify({ id, is_active: !currentStatus })
       });
       
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server error: API returned non-JSON response');
+      }
+
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || t('hr.failUpdate'));
       
@@ -196,7 +212,7 @@ export default function HRManagement() {
                       )}
                     </td>
                     <td className="p-4 text-stone-500 text-xs">
-                      {new Date(p.created_at).toLocaleDateString()}
+                      {formatDate(p.created_at, language)}
                     </td>
                     <td className="p-4 text-right">
                       <button 
