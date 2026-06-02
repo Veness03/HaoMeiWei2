@@ -1,180 +1,416 @@
--- Enable UUID extension
-create extension if not exists "uuid-ossp";
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/src/lib/supabase';
+import { Plus, Edit2, Trash2, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useLanguage } from '@/src/contexts/LanguageContext';
 
--- 1. Profiles Table (extends auth.users)
-create table profiles (
-  id uuid references auth.users on delete cascade primary key,
-  email text unique not null,
-  full_name text,
-  role text check (role in ('admin', 'owner', 'cashier', 'staff')) not null default 'staff',
-  is_active boolean default true,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+interface MenuItem {
+  id: string;
+  name: string;
+  chinese_name: string;
+  category: string;
+  price: number;
+  is_active: boolean;
+  image_url: string | null;
+}
 
--- 2. Menu Items
-create table menu_items (
-  id uuid default uuid_generate_v4() primary key,
-  name text not null,
-  chinese_name text,
-  category text not null,
-  price numeric(10,2) not null default 0,
-  is_active boolean default true,
-  image_url text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+export default function Menu() {
+  const { t } = useLanguage();
+  const [items, setItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    chinese_name: '',
+    category: 'Rice',
+    price: '',
+    is_active: true,
+    image_url: ''
+  });
 
--- 3. Sales
-create table sales (
-  id uuid default uuid_generate_v4() primary key,
-  cashier_id uuid references profiles(id),
-  total_amount numeric(10,2) not null default 0,
-  payment_method text default 'cash',
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+  useEffect(() => {
+    fetchMenu();
+  }, []);
 
--- 4. Sales Items
-create table sales_items (
-  id uuid default uuid_generate_v4() primary key,
-  sale_id uuid references sales(id) on delete cascade not null,
-  menu_item_id uuid references menu_items(id),
-  quantity integer not null default 1,
-  unit_price numeric(10,2) not null,
-  total_price numeric(10,2) not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+  async function fetchMenu() {
+    try {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('*')
+        .order('category')
+        .order('name');
+      
+      if (error) throw error;
+      setItems(data || []);
+    } catch (error: any) {
+      console.error('Error fetching menu:', error);
+      toast.error(error.message || 'Failed to fetch menu');
+    } finally {
+      setLoading(false);
+    }
+  }
 
--- 5. Expenses
-create table expenses (
-  id uuid default uuid_generate_v4() primary key,
-  title text not null,
-  category text not null,
-  amount numeric(10,2) not null,
-  expense_date date not null default current_date,
-  notes text,
-  created_by uuid references profiles(id),
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+  const handleEditClick = (item: MenuItem) => {
+    console.log('Edit clicked for item:', item.id);
+    setImageFile(null);
+    setFormData({
+      name: item.name,
+      chinese_name: item.chinese_name || '',
+      category: item.category,
+      price: item.price.toString(),
+      is_active: item.is_active,
+      image_url: item.image_url || ''
+    });
+    setEditingId(item.id);
+    setIsModalOpen(true);
+  };
 
--- 6. Suppliers
-create table suppliers (
-  id uuid default uuid_generate_v4() primary key,
-  name text not null,
-  contact_info text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+  const handleDeleteClick = async (id: string, name: string) => {
+    console.log('Delete clicked for item:', id);
+    if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
+    
+    try {
+      setLoading(true);
+      const { error } = await supabase.from('menu_items').delete().eq('id', id);
+      if (error) throw error;
+      toast.success(t('menu.successDelete') || 'Menu item deleted successfully');
+      fetchMenu();
+    } catch (error: any) {
+      console.error('Error deleting menu item:', error);
+      toast.error(error.message || 'Failed to delete menu item');
+      setLoading(false);
+    }
+  };
 
--- 7. Stock Items
-create table stock_items (
-  id uuid default uuid_generate_v4() primary key,
-  name text not null,
-  chinese_name text,
-  unit text not null,
-  current_quantity numeric(10,2) not null default 0,
-  minimum_quantity numeric(10,2) not null default 0,
-  cost_per_unit numeric(10,2) default 0,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+  const handleToggleActiveClick = async (item: MenuItem) => {
+    console.log('Toggle active clicked for item:', item.id);
+    try {
+      setLoading(true);
+      const { error } = await supabase.from('menu_items')
+        .update({ is_active: !item.is_active })
+        .eq('id', item.id);
+      if (error) throw error;
+      toast.success(`Menu item is now ${!item.is_active ? 'active' : 'inactive'}`);
+      fetchMenu();
+    } catch (error: any) {
+      console.error('Error toggling menu item status:', error);
+      toast.error(error.message || 'Failed to toggle status');
+      setLoading(false);
+    }
+  };
 
--- 8. Stock Movements
-create table stock_movements (
-  id uuid default uuid_generate_v4() primary key,
-  stock_item_id uuid references stock_items(id) on delete cascade not null,
-  movement_type text check (movement_type in ('purchase', 'usage', 'waste', 'adjustment')) not null,
-  quantity numeric(10,2) not null,
-  unit_cost numeric(10,2),
-  total_cost numeric(10,2),
-  supplier_id uuid references suppliers(id),
-  notes text,
-  created_by uuid references profiles(id),
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log('Menu Add/Edit form submitted', formData, 'editingId:', editingId);
+    try {
+      setSaving(true);
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        toast.error('You must be logged in');
+        return;
+      }
 
--- Set up Row Level Security (RLS)
+      let uploadedImageUrl = formData.image_url;
 
--- Enable RLS on all tables
-alter table profiles enable row level security;
-alter table menu_items enable row level security;
-alter table sales enable row level security;
-alter table sales_items enable row level security;
-alter table expenses enable row level security;
-alter table suppliers enable row level security;
-alter table stock_items enable row level security;
-alter table stock_movements enable row level security;
+      if (imageFile) {
+        // Convert imageFile to base64
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const base64String = (reader.result as string).split(',')[1];
+            resolve(base64String);
+          };
+          reader.onerror = error => reject(error);
+        });
+        reader.readAsDataURL(imageFile);
+        const base64Data = await base64Promise;
 
--- Policies Examples (Simplified)
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
 
--- Profiles: Users can read all profiles, update their own. Admins can update all.
-create policy "Profiles are viewable by everyone" on profiles for select using (true);
-create policy "Users can insert their own profile" on profiles for insert with check (auth.uid() = id);
-create policy "Users can update own profile" on profiles for update using (auth.uid() = id);
+        const { data: { session } } = await supabase.auth.getSession();
 
--- Menu Items: Everyone authenticated can read. Admins/owners can alter.
-create policy "Menu items viewable by authenticated users" on menu_items for select using (auth.role() = 'authenticated');
-create policy "Menu items insertable by admins" on menu_items for insert with check (
-  exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'owner'))
-);
-create policy "Menu items updatable by admins" on menu_items for update using (
-  exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'owner'))
-);
+        const res = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({
+            fileName,
+            contentType: imageFile.type,
+            base64Data
+          })
+        });
 
--- Sales & Sales Items: Viewable by all authenticated. Insertable by cashier, admin, owner.
-create policy "Sales viewable by auth" on sales for select using (auth.role() = 'authenticated');
-create policy "Sales insertable by authorized" on sales for insert with check (
-  exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'owner', 'cashier'))
-);
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Server error: API returned non-JSON response');
+        }
 
-create policy "Sales items viewable by auth" on sales_items for select using (auth.role() = 'authenticated');
-create policy "Sales items insertable by authorized" on sales_items for insert with check (
-  exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'owner', 'cashier'))
-);
+        const result = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(result.error || 'Failed to upload image');
+        }
+        
+        uploadedImageUrl = result.publicUrl;
+      }
 
--- Expenses: Viewable by admin/owner. Insertable by admin/owner.
-create policy "Expenses viewable by admins" on expenses for select using (
-  exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'owner'))
-);
-create policy "Expenses insertable by admins" on expenses for insert with check (
-  exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'owner'))
-);
+      if (editingId) {
+        const { error } = await supabase.from('menu_items')
+          .update({
+            name: formData.name,
+            chinese_name: formData.chinese_name,
+            category: formData.category,
+            price: parseFloat(formData.price),
+            is_active: formData.is_active,
+            image_url: uploadedImageUrl
+          })
+          .eq('id', editingId);
 
--- Stock: Viewable by auth. Insertable by all auth (for usage), admin/owner (for purchase/adjustment).
-create policy "Stock items viewable by auth" on stock_items for select using (auth.role() = 'authenticated');
-create policy "Stock items all operations by expected roles" on stock_items for all using (
-  exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'owner', 'staff', 'cashier'))
-);
+        if (error) throw error;
+        toast.success(t('menu.successEdit') || 'Menu item updated successfully');
+      } else {
+        const { error } = await supabase.from('menu_items').insert([{
+          name: formData.name,
+          chinese_name: formData.chinese_name,
+          category: formData.category,
+          price: parseFloat(formData.price),
+          is_active: formData.is_active,
+          image_url: uploadedImageUrl
+        }]);
 
-create policy "Stock movements viewable by auth" on stock_movements for select using (auth.role() = 'authenticated');
-create policy "Stock movements insertable by auth" on stock_movements for insert with check (
-  exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'owner', 'staff', 'cashier'))
-);
+        if (error) throw error;
+        toast.success(t('menu.successAdd'));
+      }
+      
+      setFormData({ name: '', chinese_name: '', category: 'Rice', price: '', is_active: true, image_url: '' });
+      setImageFile(null);
+      setEditingId(null);
+      setIsModalOpen(false);
+      fetchMenu();
+    } catch (error: any) {
+      console.error('Error saving menu item:', error);
+      toast.error(error.message || t('menu.failAdd'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
--- Handle New User Registration Trigger
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer set search_path = public
-as $$
-begin
-  insert into public.profiles (id, email, full_name, role)
-  values (
-    new.id,
-    new.email,
-    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data->>'role', 'staff')
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-serif font-bold text-stone-200">{t('menu.title')}</h1>
+          <p className="text-xs font-medium uppercase tracking-widest text-stone-500">{t('menu.subtitle')}</p>
+        </div>
+        <button 
+          onClick={() => {
+            console.log('Add Menu Item clicked');
+            setEditingId(null);
+            setFormData({ name: '', chinese_name: '', category: 'Rice', price: '', is_active: true });
+            setIsModalOpen(true);
+          }}
+          className="bg-amber-600 text-stone-950 font-bold px-4 py-2 rounded-xl hover:bg-amber-500 transition-colors flex items-center gap-2"
+        >
+          <Plus size={20} />
+          <span className="uppercase text-[10px] tracking-widest">{t('menu.addItem')}</span>
+        </button>
+      </div>
+
+      <div className="glass-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#111] border-b border-stone-800 text-stone-500 text-[10px] uppercase font-bold tracking-widest">
+                <th className="p-4">{t('menu.nameEn')}</th>
+                <th className="p-4">{t('menu.nameZh')}</th>
+                <th className="p-4">{t('menu.category')}</th>
+                <th className="p-4 text-right">{t('menu.price')}</th>
+                <th className="p-4 text-center">{t('common.status')}</th>
+                <th className="p-4 text-right">{t('common.actions')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-800 bg-[#161616]">
+              {loading ? (
+                <tr><td colSpan={6} className="p-4 text-center text-stone-400">{t('common.loading')}</td></tr>
+              ) : items.length === 0 ? (
+                <tr><td colSpan={6} className="p-8 text-center text-stone-500">{t('menu.noItems')}</td></tr>
+              ) : (
+                items.map(item => (
+                  <tr key={item.id} className="hover:bg-stone-800/30 transition-colors">
+                    <td className="p-4 font-medium text-stone-200 flex items-center gap-3">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name} className="w-10 h-10 object-cover rounded-lg border border-stone-700" />
+                      ) : (
+                        <div className="w-10 h-10 bg-stone-800 rounded-lg border border-stone-700 flex items-center justify-center text-stone-500 text-[10px]">No Img</div>
+                      )}
+                      <span>{item.name}</span>
+                    </td>
+                    <td className="p-4 text-stone-400">{item.chinese_name || '-'}</td>
+                    <td className="p-4">
+                      <span className="bg-stone-800 border border-stone-700 text-stone-300 px-2 py-1 rounded text-xs font-medium uppercase tracking-wider">
+                        {item.category}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right font-medium text-amber-500">{item.price.toFixed(2)}</td>
+                    <td className="p-4 text-center">
+                      <button 
+                        onClick={() => handleToggleActiveClick(item)}
+                        className={`px-2 py-1 rounded text-[10px] border tracking-widest uppercase font-bold hover:brightness-110 transition-all ${
+                          item.is_active ? 'bg-emerald-950/40 text-emerald-500 border-emerald-900/50' : 'bg-rose-950/40 text-rose-500 border-rose-900/50'
+                        }`}
+                      >
+                        {item.is_active ? t('menu.active') : t('menu.inactive')}
+                      </button>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => handleEditClick(item)}
+                          className="p-1 text-stone-500 hover:text-amber-500 transition-colors"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteClick(item.id, item.name)}
+                          className="p-1 text-stone-500 hover:text-rose-500 transition-colors"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#161616] border border-stone-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-stone-800 flex justify-between items-center bg-stone-900/50">
+              <h2 className="text-lg font-serif font-bold text-stone-200">{t('menu.addTitle')}</h2>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-stone-400 hover:text-stone-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold tracking-widest uppercase text-stone-400 mb-1">{t('menu.nameEn')}</label>
+                <input 
+                  required
+                  type="text" 
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  className="w-full bg-[#111] border border-stone-800 rounded-lg px-4 py-2.5 text-stone-200 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold tracking-widest uppercase text-stone-400 mb-1">{t('menu.nameZh')}</label>
+                <input 
+                  type="text" 
+                  value={formData.chinese_name}
+                  onChange={e => setFormData({...formData, chinese_name: e.target.value})}
+                  className="w-full bg-[#111] border border-stone-800 rounded-lg px-4 py-2.5 text-stone-200 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold tracking-widest uppercase text-stone-400 mb-1">{t('menu.price')}</label>
+                  <input 
+                    required
+                    type="number" 
+                    step="0.01"
+                    min="0"
+                    value={formData.price}
+                    onChange={e => setFormData({...formData, price: e.target.value})}
+                    className="w-full bg-[#111] border border-stone-800 rounded-lg px-4 py-2.5 text-stone-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold tracking-widest uppercase text-stone-400 mb-1">{t('menu.category')}</label>
+                  <select 
+                    value={formData.category}
+                    onChange={e => setFormData({...formData, category: e.target.value})}
+                    className="w-full bg-[#111] border border-stone-800 rounded-lg px-4 py-2.5 text-stone-200 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Rice">{t('menu.catRice')}</option>
+                    <option value="Meat">{t('menu.catMeat')}</option>
+                    <option value="Vegetable">{t('menu.catVegetable')}</option>
+                    <option value="Seafood">{t('menu.catSeafood')}</option>
+                    <option value="Tofu/Egg">{t('menu.catTofuEgg')}</option>
+                    <option value="Drink">{t('menu.catDrink')}</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-semibold tracking-widest uppercase text-stone-400 mb-1">Image</label>
+                <div className="flex items-center gap-4">
+                  {formData.image_url && !imageFile && (
+                    <img src={formData.image_url} alt="Preview" className="w-16 h-16 object-cover rounded-lg border border-stone-700" />
+                  )}
+                  {imageFile && (
+                    <img src={URL.createObjectURL(imageFile)} alt="Preview" className="w-16 h-16 object-cover rounded-lg border border-stone-700" />
+                  )}
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={e => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        setImageFile(e.target.files[0]);
+                      }
+                    }}
+                    className="w-full text-sm text-stone-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-stone-800 file:text-stone-300 hover:file:bg-stone-700"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input 
+                  type="checkbox" 
+                  id="isActive"
+                  checked={formData.is_active}
+                  onChange={e => setFormData({...formData, is_active: e.target.checked})}
+                  className="w-4 h-4 accent-amber-600 rounded bg-[#111] border-stone-800"
+                />
+                <label htmlFor="isActive" className="text-sm text-stone-400">{t('menu.available')}</label>
+              </div>
+              
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    console.log('Cancel clicked');
+                    setIsModalOpen(false);
+                  }}
+                  className="flex-1 px-4 py-2.5 border border-stone-700 text-stone-400 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-stone-800 transition-colors"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button 
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 bg-amber-600 text-stone-950 px-4 py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-amber-500 transition-colors disabled:opacity-50"
+                >
+                  {saving ? t('menu.saving') : t('menu.saveItem')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   );
-  return new;
-end;
-$$;
-
--- Trigger the function every time a user is created
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
-
--- Note: You should also create a storage bucket in Supabase named 'menu-images' for storing menu images and make it public.
--- Example SQL for Storage (if using SQL for storage administration):
--- insert into storage.buckets (id, name, public) values ('menu-images', 'menu-images', true);
--- create policy "Menu images are publicly accessible" on storage.objects for select using ( bucket_id = 'menu-images' );
--- create policy "Menu images can be uploaded by authenticated" on storage.objects for insert with check ( bucket_id = 'menu-images' and auth.role() = 'authenticated' );
--- create policy "Menu images can be updated by authenticated" on storage.objects for update with check ( bucket_id = 'menu-images' and auth.role() = 'authenticated' );
--- create policy "Menu images can be deleted by authenticated" on storage.objects for delete using ( bucket_id = 'menu-images' and auth.role() = 'authenticated' );
+}
