@@ -10,7 +10,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // Lazy initialize Supabase admin client
   let supabaseAdmin: ReturnType<typeof createClient> | null = null;
@@ -47,12 +47,13 @@ async function startServer() {
         return;
       }
 
-      const { data: profile, error: profileError } = await adminClient
+      const { data: profileData, error: profileError } = await adminClient
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .single();
         
+      const profile = profileData as any;
       if (profileError || !profile || (profile.role !== 'admin' && profile.role !== 'owner')) {
         res.status(403).json({ error: 'Require admin privileges' });
         return;
@@ -115,7 +116,7 @@ async function startServer() {
       const adminClient = getSupabaseAdmin();
       const { error } = await adminClient
         .from('profiles')
-        .update(updates)
+        .update(updates as never)
         .eq('id', id);
 
       if (error) {
@@ -131,6 +132,47 @@ async function startServer() {
       }
 
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/upload-image', verifyAdmin, async (req: express.Request, res: express.Response) => {
+    try {
+      const { fileName, contentType, base64Data } = req.body;
+      
+      if (!fileName || !contentType || !base64Data) {
+        res.status(400).json({ error: 'Missing required fields' });
+        return;
+      }
+
+      const adminClient = getSupabaseAdmin();
+      
+      const { data: buckets } = await adminClient.storage.listBuckets();
+      if (!buckets?.find(b => b.name === 'menu-images')) {
+        await adminClient.storage.createBucket('menu-images', { public: true });
+      }
+
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      const { data, error } = await adminClient.storage
+        .from('menu-images')
+        .upload(fileName, buffer, {
+          contentType,
+          upsert: true
+        });
+
+      if (error) {
+        console.error("Image upload error:", error);
+        res.status(400).json({ error: error.message });
+        return;
+      }
+
+      const { data: { publicUrl } } = adminClient.storage
+        .from('menu-images')
+        .getPublicUrl(data.path);
+
+      res.json({ success: true, publicUrl });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
