@@ -19,6 +19,7 @@ create table menu_items (
   category text not null,
   price numeric(10,2) not null default 0,
   is_active boolean default true,
+  image_url text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -169,3 +170,11 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- Note: You should also create a storage bucket in Supabase named 'menu-images' for storing menu images and make it public.
+-- Example SQL for Storage (if using SQL for storage administration):
+-- insert into storage.buckets (id, name, public) values ('menu-images', 'menu-images', true);
+-- create policy "Menu images are publicly accessible" on storage.objects for select using ( bucket_id = 'menu-images' );
+-- create policy "Menu images can be uploaded by authenticated" on storage.objects for insert with check ( bucket_id = 'menu-images' and auth.role() = 'authenticated' );
+-- create policy "Menu images can be updated by authenticated" on storage.objects for update with check ( bucket_id = 'menu-images' and auth.role() = 'authenticated' );
+-- create policy "Menu images can be deleted by authenticated" on storage.objects for delete using ( bucket_id = 'menu-images' and auth.role() = 'authenticated' );
