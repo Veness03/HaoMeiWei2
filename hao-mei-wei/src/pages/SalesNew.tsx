@@ -11,6 +11,7 @@ interface MenuItem {
   chinese_name: string;
   category: string;
   price: number;
+  image_url: string | null;
 }
 
 interface CartItem extends MenuItem {
@@ -181,16 +182,25 @@ export default function SalesNew() {
                 <button
                   key={item.id}
                   onClick={() => addToCart(item)}
-                  className="bg-[#111] border border-stone-800/60 rounded-xl p-4 text-left hover:border-amber-500/50 hover:shadow-xl transition-all group flex flex-col h-full"
+                  className="bg-[#111] border border-stone-800/60 rounded-xl p-0 text-left hover:border-amber-500/50 hover:shadow-xl transition-all group flex flex-col h-full overflow-hidden"
                 >
-                  <div className="flex-1">
-                    <p className="font-serif font-bold text-stone-200 group-hover:text-amber-500 line-clamp-2">{item.name}</p>
-                    {item.chinese_name && <p className="text-sm text-stone-500">{item.chinese_name}</p>}
+                  <div className="w-full h-32 bg-stone-800 shrink-0 border-b border-stone-800">
+                    {item.image_url ? (
+                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-stone-600 text-xs uppercase tracking-widest font-semibold">No Image</div>
+                    )}
                   </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="font-bold text-amber-500 text-lg">RM {item.price.toFixed(2)}</span>
-                    <div className="w-8 h-8 rounded-full border border-stone-700 bg-stone-800/50 text-stone-400 flex items-center justify-center group-hover:bg-amber-500/20 group-hover:text-amber-500 group-hover:border-amber-500/30 transition-colors">
-                      <Plus size={16} />
+                  <div className="p-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <p className="font-serif font-bold text-stone-200 group-hover:text-amber-500 line-clamp-2">{item.name}</p>
+                      {item.chinese_name && <p className="text-sm text-stone-500">{item.chinese_name}</p>}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className="font-bold text-amber-500 text-lg">RM {item.price.toFixed(2)}</span>
+                      <div className="w-8 h-8 rounded-full border border-stone-700 bg-stone-800/50 text-stone-400 flex items-center justify-center group-hover:bg-amber-500/20 group-hover:text-amber-500 group-hover:border-amber-500/30 transition-colors">
+                        <Plus size={16} />
+                      </div>
                     </div>
                   </div>
                 </button>
